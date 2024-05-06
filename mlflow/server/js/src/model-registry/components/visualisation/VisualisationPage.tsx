@@ -177,7 +177,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 					</Button>
 				</Spacer>
 			</div>
-			{searchNotFound && !fetchingData &&(
+			{searchNotFound && !fetchingData && (
 				<div style={{ color: 'red', marginBottom: '12px' }}>
 					Metric not found. Please enter a valid metric name.
 				</div>
@@ -239,6 +239,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 											type: 'scatter',
 											mode: 'lines+markers',
 											marker: { color: 'blue' },
+											name: metric.name
 										},
 									]}
 									layout={{
