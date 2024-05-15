@@ -13,7 +13,13 @@ interface PlotSettingsModalProps {
 	onChangeLayout: (layout: { [key: string]: any }) => void;
 }
 
-const PlotSettingsModal: React.FC<PlotSettingsModalProps> = ({ isOpen, onRequestClose, plotData, layout, onChangeLayout }) => {
+const PlotSettingsModal: React.FC<PlotSettingsModalProps> = ({
+	isOpen,
+	onRequestClose,
+	plotData,
+	layout,
+	onChangeLayout,
+}) => {
 	const [localLayout, setLocalLayout] = useState(layout);
 
 	const handleLayoutChange = (newLayout: { [key: string]: any }) => {

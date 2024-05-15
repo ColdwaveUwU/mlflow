@@ -26,6 +26,7 @@ import { ModelVersionInfoEntity, type ModelEntity } from '../../experiment-track
 import { shouldShowModelsNextUI } from '../../common/utils/FeatureUtils';
 import { ModelsNextUIToggleSwitch } from './ModelsNextUIToggleSwitch';
 import { withNextModelsUIContext } from '../hooks/useNextModelsUI';
+import {Tabs} from 'antd';
 import VisualisationPage from './visualisation/VisualisationPage';
 
 export const StageFilters = {

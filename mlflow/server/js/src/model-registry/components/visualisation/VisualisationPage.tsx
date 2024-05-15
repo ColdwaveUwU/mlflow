@@ -2,11 +2,13 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Plot from 'react-plotly.js';
 import { HTTPMethods, fetchEndpoint } from 'common/utils/FetchUtils';
 import { RunEntity, ModelVersionInfoEntity, RunDatasetWithTags } from 'experiment-tracking/types';
-import { Input, Button, Spinner } from '@databricks/design-system';
+import { Input, Button, Spinner, TabPane, Tabs } from '@databricks/design-system';
 import { Row, Col } from 'antd';
 import { FormattedMessage } from 'react-intl';
 import { Spacer } from '../../../../src/shared/building_blocks/Spacer';
 import PlotSettingsModal from './PlotSettingsModal';
+import MergeGraphsModal from './MergeGraphsModal';
+import { PlotData } from 'plotly.js';
 
 interface ModelVersionResponse {
 	model_versions: ModelVersionInfoEntity[];
@@ -20,84 +22,141 @@ type RunInfoEntityResponse = {
 	run: RunEntity & DataSetInputs;
 };
 
+interface DropIndex {
+	index: number;
+	dropIndex: number;
+}
+
+type ChartData = {
+	name: string;
+	x: string[];
+	y: number[];
+	type: Plotly.PlotType;
+	mode: PlotData['mode'];
+	xaxis: PlotData['xaxis'];
+	yaxis: PlotData['yaxis'];
+};
+type LayoutSettings = { title: Plotly.Layout['title']; xaxis: Plotly.Layout['xaxis']; yaxis: Plotly.Layout['yaxis'] };
+type ChartSetting = { data: ChartData; layout: LayoutSettings };
+
+type MergedChart = {
+	layout: LayoutSettings;
+	data: ChartData[];
+};
+
 interface ModelNameProps {
 	name: string;
 }
 
 const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
-	const [layout, setLayout] = useState<{ [key: string]: any }>({ xaxis: { title: 'Time' }, yaxis: { title: 'Value' } });
-	const [data, setData] = useState<{ name: string; x: string[]; y: number[] }[]>([]);
-	const [filteredData, setFilteredData] = useState<{ name: string; x: string[]; y: number[] }[]>([]);
+	const [data, setData] = useState<ChartSetting[]>([]);
+	const [filteredData, setFilteredData] = useState<ChartSetting[]>([]);
 	const [selectedMetric, setSelectedMetric] = useState<string>('');
 	const [inputValue, setInputValue] = useState<string>('');
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 	const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
 	const [plotSettingsModalOpen, setPlotSettingsModalOpen] = useState<boolean>(false);
-	const [selectedPlotData, setSelectedPlotData] = useState<{ name: string; x: string[]; y: number[] } | null>(null);
+	const [selectedPlotData, setSelectedPlotData] = useState<ChartSetting | null>(null);
 	const [searchNotFound, setSearchNotFound] = useState<boolean>(false);
 	const [refreshing, setRefreshing] = useState<boolean>(false);
 	const [fetchingData, setFetchingData] = useState<boolean>(false);
+
+	const [metricsType, setMetricsType] = useState<string>('offline');
+
+	const [mergeModalVisible, setMergeModalVisible] = useState<boolean>(false);
+	const [mergeMetricsGraph, setMergeMetricsGraph] = useState<boolean>(false);
+
+	const [traceSettings, setTraceSettings] = useState<{ type: Plotly.PlotType; mode: PlotData['mode'] }>({
+		type: 'scatter',
+		mode: 'lines+markers',
+	});
+	const [layoutSettings, setLayout] = useState<LayoutSettings>({
+		title: 'noname',
+		xaxis: { title: 'Time' },
+		yaxis: { title: 'Value' },
+	});
+
+	const [dropIndex, setDropIndex] = useState<DropIndex>({
+		index: 0,
+		dropIndex: 0,
+	});
+
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	const fetchData = useCallback(async () => {
 		setRefreshing(true);
-		setFetchingData(true);
-		const apiUrlModelVersions = 'ajax-api/2.0/mlflow/model-versions/search';
-		const value = await fetchEndpoint({ relativeUrl: apiUrlModelVersions, method: HTTPMethods.GET });
-		const response = value as ModelVersionResponse;
-		const filteredData = response.model_versions
-			.filter((modelVersion: ModelVersionInfoEntity) => modelVersion.name === name)
-			.map((modelVersion: ModelVersionInfoEntity) => ({
-				run_id: modelVersion.run_id,
-				creation_timestamp: modelVersion.creation_timestamp,
-			}));
-		const apiUrlRunId = 'ajax-api/2.0/mlflow/runs/get';
+		const metricData: ChartSetting[] = [];
+		if (metricsType === 'offline') {
+			setFetchingData(true);
+			const apiUrlModelVersions = 'ajax-api/2.0/mlflow/model-versions/search';
+			const value = await fetchEndpoint({ relativeUrl: apiUrlModelVersions, method: HTTPMethods.GET });
+			const response = value as ModelVersionResponse;
+			const filteredData = response.model_versions
+				.filter((modelVersion: ModelVersionInfoEntity) => modelVersion.name === name)
+				.map((modelVersion: ModelVersionInfoEntity) => ({
+					run_id: modelVersion.run_id,
+					creation_timestamp: modelVersion.creation_timestamp,
+				}));
+			const apiUrlRunId = 'ajax-api/2.0/mlflow/runs/get';
 
-		const fetchPromises = filteredData.map(async (filterData) => {
-			const queryParams = new URLSearchParams({
-				run_id: filterData.run_id,
+			const fetchPromises = filteredData.map(async (filterData) => {
+				const queryParams = new URLSearchParams({
+					run_id: filterData.run_id,
+				});
+
+				const url = `${apiUrlRunId}?${queryParams}`;
+
+				const response = await fetchEndpoint({ relativeUrl: url, method: HTTPMethods.GET });
+				return response as RunEntity;
 			});
 
-			const url = `${apiUrlRunId}?${queryParams}`;
-
-			const response = await fetchEndpoint({ relativeUrl: url, method: HTTPMethods.GET });
-			return response as RunEntity;
-		});
-
-		const runs = await Promise.all(fetchPromises).catch((error) => {
-			console.error('Request execution error', error);
-			return [];
-		});
-
-		const runInfoArr = runs as RunInfoEntityResponse[];
-		const metricData: { name: string; x: string[]; y: number[] }[] = [];
-		runInfoArr.forEach((runInfo) => {
-			runInfo.run.data.metrics.forEach((metric) => {
-				const metricIndex = metricData.findIndex((item) => item.name === metric.key);
-				if (metricIndex !== -1) {
-					metricData[metricIndex].x.push(new Date(metric.timestamp).toISOString());
-					metricData[metricIndex].y.push(metric.value);
-				} else {
-					metricData.push({
-						name: metric.key,
-						x: [new Date(metric.timestamp).toISOString()],
-						y: [metric.value],
-					});
-				}
+			const runs = await Promise.all(fetchPromises).catch((error) => {
+				console.error('Request execution error', error);
+				return [];
 			});
-		});
+
+			const runInfoArr = runs as RunInfoEntityResponse[];
+			runInfoArr.forEach((runInfo) => {
+				runInfo.run.data.metrics.forEach((metric) => {
+					const metricIndex = metricData.findIndex((item) => item.layout.title === metric.key);
+					if (metricIndex !== -1) {
+						metricData[metricIndex].data.x.push(new Date(metric.timestamp).toISOString());
+						metricData[metricIndex].data.y.push(metric.value);
+					} else {
+						metricData.push({
+							data: {
+								name: metric.key,
+								x: [new Date(metric.timestamp).toISOString()],
+								y: [metric.value],
+								type: 'scatter',
+								mode: 'lines+markers',
+								xaxis: 'x1',
+								yaxis: 'y1',
+							},
+							layout: {
+								title: metric.key.toString(),
+								xaxis: { title: 'Time' },
+								yaxis: { title: 'Time' },
+							},
+						});
+					}
+				});
+			});
+		} else {
+			setFetchingData(true);
+		}
 		setData(metricData);
 		setFilteredData(metricData);
 		setRefreshing(false);
 		setFetchingData(false);
-	}, [name]);
+	}, [metricsType, name]);
 
 	useEffect(() => {
 		fetchData();
 	}, [fetchData]);
 
 	useEffect(() => {
-		setFilteredData(data.filter((metric) => metric.name.includes(inputValue)));
+		setFilteredData(data.filter((metric) => metric.layout.title.toString().includes(inputValue)));
 	}, [data, inputValue]);
 
 	const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,7 +167,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 	};
 
 	useEffect(() => {
-		const foundMetric = data.find((metric) => metric.name.includes(inputValue));
+		const foundMetric = data.find((metric) => metric.layout.title.toString().includes(inputValue));
 		setSearchNotFound(!foundMetric);
 	}, [data, inputValue]);
 
@@ -125,7 +184,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 			const newData = [...filteredData];
 			[newData[draggedIndex], newData[index]] = [newData[index], newData[draggedIndex]];
 			setFilteredData(newData);
-			setData(newData)
+			setData(newData);
 			setDraggedIndex(index);
 		}
 		setDraggedIndex(null);
@@ -135,15 +194,28 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 	const handleDrop = (index: number) => {
 		if (draggedIndex !== null && draggedIndex !== index) {
 			const newData = [...filteredData];
+			setMergeModalVisible(true);
 			[newData[draggedIndex], newData[index]] = [newData[index], newData[draggedIndex]];
+			const dropInfo = { index: index, dropIndex: draggedIndex };
+			setDropIndex(dropInfo);
 			setFilteredData(newData);
-			setData(newData)
+			setData(newData);
 			setDraggedIndex(null);
 			setHighlightedIndex(null);
 		}
 	};
 
-	const handleDoubleClickPlot = (plotData: { name: string; x: string[]; y: number[] }) => {
+	const handleMergeConfirm = () => {
+		setMergeMetricsGraph(true);
+		setMergeModalVisible(false);
+	};
+
+	const handleMergeCancel = () => {
+		setMergeMetricsGraph(false);
+		setMergeModalVisible(false);
+	};
+
+	const handleDoubleClickPlot = (plotData: ChartSetting) => {
 		setSelectedPlotData(plotData);
 		setPlotSettingsModalOpen(true);
 	};
@@ -151,6 +223,65 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 	const handleClosePlotSettingsModal = () => {
 		setPlotSettingsModalOpen(false);
 	};
+
+	useEffect(() => {
+		if (mergeMetricsGraph && Object.keys(dropIndex).length !== 0) {
+			const newLayout = filteredData[dropIndex.dropIndex].layout;
+			newLayout.title = `${newLayout.title}-${filteredData[dropIndex.index].layout.title}`;
+			const mergedGraph: MergedChart = {
+				data: [
+					...(Array.isArray(filteredData[dropIndex.dropIndex].data)
+						? filteredData[dropIndex.dropIndex].data.map((dataItem: ChartData) => ({
+							name: dataItem.name,
+							x: [...dataItem.x],
+							y: [...dataItem.y],
+							type: traceSettings.type,
+							mode: traceSettings.mode,
+							xaxis: '',
+							yaxis: '',
+						}))
+						: [
+							{
+								name: filteredData[dropIndex.dropIndex].data.name,
+								x: [...filteredData[dropIndex.dropIndex].data.x],
+								y: [...filteredData[dropIndex.dropIndex].data.y],
+								type: traceSettings.type,
+								mode: traceSettings.mode,
+								xaxis: '',
+								yaxis: '',
+							},
+						]),
+					...(Array.isArray(filteredData[dropIndex.index].data)
+						? filteredData[dropIndex.index].data.map((dataItem: ChartData) => ({
+							name: dataItem.name,
+							x: [...dataItem.x],
+							y: [...dataItem.y],
+							type: traceSettings.type,
+							mode: traceSettings.mode,
+							xaxis: '',
+							yaxis: '',
+						}))
+						: [
+							{
+								name: filteredData[dropIndex.index].data.name,
+								x: [...filteredData[dropIndex.index].data.x],
+								y: [...filteredData[dropIndex.index].data.y],
+								type: traceSettings.type,
+								mode: traceSettings.mode,
+								xaxis: '',
+								yaxis: '',
+							},
+						]),
+				],
+				layout: newLayout,
+			};
+
+			const newData = filteredData.filter((_, index) => index !== dropIndex.dropIndex && index !== dropIndex.index);
+			newData.splice(dropIndex.dropIndex, 0, mergedGraph);
+			setData(newData);
+			setMergeMetricsGraph(false);
+		}
+	}, [mergeMetricsGraph, filteredData, dropIndex, traceSettings.type, traceSettings.mode]);
 
 	return (
 		<div>
@@ -163,12 +294,10 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 						onChange={handleInputChange}
 						placeholder="Enter metric name"
 					/>
-					<Button
-						data-test-id="search-button"
-						componentId={''}
-						onClick={fetchData}
-					>
-						{refreshing || fetchingData ? <Spinner /> : (
+					<Button data-test-id="search-button" componentId={''} onClick={fetchData}>
+						{refreshing || fetchingData ? (
+							<Spinner />
+						) : (
 							<FormattedMessage
 								defaultMessage="Refresh"
 								description="String for the search button to search objects in MLflow"
@@ -176,11 +305,13 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 						)}
 					</Button>
 				</Spacer>
+				<Tabs activeKey={metricsType} onChange={(key) => setMetricsType(key)}>
+					<TabPane tab="Offline Metrics" key="offline" />
+					<TabPane tab="Other Metrics" key="other" />
+				</Tabs>
 			</div>
 			{searchNotFound && !fetchingData && (
-				<div style={{ color: 'red', marginBottom: '12px' }}>
-					Metric not found. Please enter a valid metric name.
-				</div>
+				<div style={{ color: 'red', marginBottom: '12px' }}>Metric not found. Please enter a valid metric name.</div>
 			)}
 			{fetchingData && (
 				<div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
@@ -207,7 +338,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 				>
 					{filteredData.map((metric, index) => (
 						<Col
-							key={metric.name}
+							key={metric.layout.title.toString()}
 							span={8}
 							style={{
 								transition: 'transform 0.3s ease-in-out, opacity 0.3s ease-in-out',
@@ -232,19 +363,9 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 								onDoubleClick={() => handleDoubleClickPlot(metric)}
 							>
 								<Plot
-									data={[
-										{
-											x: metric.x.map((timestamp) => new Date(timestamp).toLocaleDateString()),
-											y: metric.y,
-											type: 'scatter',
-											mode: 'lines+markers',
-											marker: { color: 'blue' },
-											name: metric.name
-										},
-									]}
+									data={Array.isArray(metric.data) ? metric.data : [metric.data]}
 									layout={{
-										title: metric.name,
-										...layout[metric.name],
+										...metric.layout,
 									}}
 									config={{ displaylogo: false }}
 									style={{ width: '100%', height: '100%' }}
@@ -253,20 +374,24 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 						</Col>
 					))}
 				</Row>
-
-
 			)}
 			<PlotSettingsModal
 				isOpen={plotSettingsModalOpen}
 				onRequestClose={handleClosePlotSettingsModal}
 				plotData={selectedPlotData}
-				layout={layout[selectedPlotData?.name ?? ''] || {}}
+				layout={layoutSettings[selectedPlotData?.name ?? ''] || {}}
 				onChangeLayout={(newLayout) =>
 					setLayout((prevLayout) => ({
 						...prevLayout,
 						[selectedPlotData?.name ?? '']: newLayout,
 					}))
 				}
+			/>
+			<MergeGraphsModal
+				visible={mergeModalVisible}
+				onConfirm={handleMergeConfirm}
+				onCancel={handleMergeCancel}
+				setMergeMetricsGraph={setMergeMetricsGraph}
 			/>
 		</div>
 	);
