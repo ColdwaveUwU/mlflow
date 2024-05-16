@@ -1,23 +1,23 @@
 import React from 'react';
 import { Modal, Button } from 'antd';
 
-interface MergeGraphsModalProps {
+interface MergeChartsModalProps {
 	visible: boolean;
 	onConfirm: () => void;
 	onCancel: () => void;
-	setMergeMetricsGraph: (value: boolean) => void;
+	setMergeMetricsChart: (value: boolean) => void;
 }
 
-const MergeGraphsModal: React.FC<MergeGraphsModalProps> = ({ visible, onConfirm, onCancel, setMergeMetricsGraph }) => {
+const MergeChartsModal: React.FC<MergeChartsModalProps> = ({ visible, onConfirm, onCancel, setMergeMetricsChart }) => {
 	const handleMergeConfirm = () => {
-		setMergeMetricsGraph(true);
+		setMergeMetricsChart(true);
 		onConfirm();
 	};
 
 	return (
 		<Modal
 			visible={visible}
-			title="Merge Graphs"
+			title="Merge Charts"
 			onCancel={onCancel}
 			footer={[
 				<Button key="cancel" onClick={onCancel}>
@@ -28,9 +28,9 @@ const MergeGraphsModal: React.FC<MergeGraphsModalProps> = ({ visible, onConfirm,
 				</Button>,
 			]}
 		>
-			<p>Do you want to merge the graphs?</p>
+			<p>Do you want to merge the Charts?</p>
 		</Modal>
 	);
 };
 
-export default MergeGraphsModal;
+export default MergeChartsModal;

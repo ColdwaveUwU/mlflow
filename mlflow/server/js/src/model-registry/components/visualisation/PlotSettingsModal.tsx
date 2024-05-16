@@ -1,34 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Plot from 'react-plotly.js';
 import { Button, Tabs, Modal } from 'antd';
 import PlotLayoutSettings from './PlotLayoutSettings';
+import { LayoutSettings, ChartSetting } from './type';
 
 const { TabPane } = Tabs;
 
 interface PlotSettingsModalProps {
 	isOpen: boolean;
 	onRequestClose: () => void;
-	plotData: { name: string; x: string[]; y: number[] } | null;
-	layout: { [key: string]: any };
-	onChangeLayout: (layout: { [key: string]: any }) => void;
+	plot: ChartSetting | null;
+	onChangeLayout: (layout: LayoutSettings) => void;
 }
 
 const PlotSettingsModal: React.FC<PlotSettingsModalProps> = ({
 	isOpen,
 	onRequestClose,
-	plotData,
-	layout,
-	onChangeLayout,
+	plot,
+	onChangeLayout, 
 }) => {
-	const [localLayout, setLocalLayout] = useState(layout);
+	const [localLayout, setLocalLayout] = useState<LayoutSettings | null>(null);
 
-	const handleLayoutChange = (newLayout: { [key: string]: any }) => {
-		setLocalLayout(newLayout);
-	};
+	useEffect(() => {
+		if (isOpen && plot) {
+			setLocalLayout(plot.layout);
+		}
+	}, [isOpen, plot]);
 
 	const handleApplyChanges = () => {
-		onChangeLayout(localLayout);
+		if (plot && localLayout) {
+			onChangeLayout(localLayout);
+		}
 		onRequestClose();
+	};
+
+	const handleLayoutChange = (updatedLayout: LayoutSettings) => {
+		setLocalLayout(updatedLayout);
 	};
 
 	return (
@@ -49,22 +56,11 @@ const PlotSettingsModal: React.FC<PlotSettingsModalProps> = ({
 			]}
 			width="70%"
 		>
-			{plotData && (
+			{plot && localLayout && (
 				<>
 					<Plot
-						data={[
-							{
-								x: plotData.x.map((timestamp) => new Date(timestamp).toLocaleString()),
-								y: plotData.y,
-								type: 'scatter',
-								mode: 'lines+markers',
-								marker: { color: 'blue' },
-							},
-						]}
+						data={Array.isArray(plot.data) ? plot.data : [plot.data]}
 						layout={{
-							title: plotData.name,
-							xaxis: { title: 'Time' },
-							yaxis: { title: 'Value' },
 							...localLayout,
 						}}
 						config={{ displaylogo: false }}
@@ -74,6 +70,7 @@ const PlotSettingsModal: React.FC<PlotSettingsModalProps> = ({
 						<TabPane tab="Layout" key="layout">
 							<PlotLayoutSettings layout={localLayout} onChange={handleLayoutChange} />
 						</TabPane>
+						<TabPane tab="Data" key="data"></TabPane>
 					</Tabs>
 				</>
 			)}

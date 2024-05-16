@@ -7,51 +7,24 @@ import { Row, Col } from 'antd';
 import { FormattedMessage } from 'react-intl';
 import { Spacer } from '../../../../src/shared/building_blocks/Spacer';
 import PlotSettingsModal from './PlotSettingsModal';
-import MergeGraphsModal from './MergeGraphsModal';
+import MergeChartsModal from './MergeChartsModal';
 import { PlotData } from 'plotly.js';
-
-interface ModelVersionResponse {
-	model_versions: ModelVersionInfoEntity[];
-}
-
-interface DataSetInputs {
-	inputs: RunDatasetWithTags;
-}
-
-type RunInfoEntityResponse = {
-	run: RunEntity & DataSetInputs;
-};
-
-interface DropIndex {
-	index: number;
-	dropIndex: number;
-}
-
-type ChartData = {
-	name: string;
-	x: string[];
-	y: number[];
-	type: Plotly.PlotType;
-	mode: PlotData['mode'];
-	xaxis: PlotData['xaxis'];
-	yaxis: PlotData['yaxis'];
-};
-type LayoutSettings = { title: Plotly.Layout['title']; xaxis: Plotly.Layout['xaxis']; yaxis: Plotly.Layout['yaxis'] };
-type ChartSetting = { data: ChartData; layout: LayoutSettings };
-
-type MergedChart = {
-	layout: LayoutSettings;
-	data: ChartData[];
-};
-
-interface ModelNameProps {
-	name: string;
-}
+import {
+	ModelVersionResponse,
+	RunInfoEntityResponse,
+	DropIndex,
+	ChartData,
+	LayoutSettings,
+	ChartSetting,
+	MergedChart,
+	ModelNameProps,
+} from './type';
+import MergeErrorChartModal from './MergeErrorChartModal';
 
 const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 	const [data, setData] = useState<ChartSetting[]>([]);
 	const [filteredData, setFilteredData] = useState<ChartSetting[]>([]);
-	const [selectedMetric, setSelectedMetric] = useState<string>('');
+	const [_, setSelectedMetric] = useState<string>('');
 	const [inputValue, setInputValue] = useState<string>('');
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 	const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
@@ -64,16 +37,13 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 	const [metricsType, setMetricsType] = useState<string>('offline');
 
 	const [mergeModalVisible, setMergeModalVisible] = useState<boolean>(false);
-	const [mergeMetricsGraph, setMergeMetricsGraph] = useState<boolean>(false);
+	const [mergeMetricsChart, setMergeMetricsChart] = useState<boolean>(false);
+
+	const [errorMerge, setErrorMerge] = useState<boolean>(false);
 
 	const [traceSettings, setTraceSettings] = useState<{ type: Plotly.PlotType; mode: PlotData['mode'] }>({
 		type: 'scatter',
 		mode: 'lines+markers',
-	});
-	const [layoutSettings, setLayout] = useState<LayoutSettings>({
-		title: 'noname',
-		xaxis: { title: 'Time' },
-		yaxis: { title: 'Value' },
 	});
 
 	const [dropIndex, setDropIndex] = useState<DropIndex>({
@@ -96,6 +66,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 				.map((modelVersion: ModelVersionInfoEntity) => ({
 					run_id: modelVersion.run_id,
 					creation_timestamp: modelVersion.creation_timestamp,
+					version: modelVersion.version
 				}));
 			const apiUrlRunId = 'ajax-api/2.0/mlflow/runs/get';
 
@@ -114,10 +85,10 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 				console.error('Request execution error', error);
 				return [];
 			});
-
+			console.log(filteredData);
 			const runInfoArr = runs as RunInfoEntityResponse[];
 			runInfoArr.forEach((runInfo) => {
-				runInfo.run.data.metrics.forEach((metric) => {
+				runInfo.run.data.metrics.forEach((metric, index) => {
 					const metricIndex = metricData.findIndex((item) => item.layout.title === metric.key);
 					if (metricIndex !== -1) {
 						metricData[metricIndex].data.x.push(new Date(metric.timestamp).toISOString());
@@ -136,7 +107,9 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 							layout: {
 								title: metric.key.toString(),
 								xaxis: { title: 'Time' },
-								yaxis: { title: 'Time' },
+								yaxis: { title: 'Value' },
+								showlegend: true,
+								grid: {},
 							},
 						});
 					}
@@ -144,7 +117,26 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 			});
 		} else {
 			setFetchingData(true);
+			metricData.push({
+				data: {
+					name: "sa",
+					x: ["1223213"],
+					y: [3],
+					type: 'scatter',
+					mode: 'lines+markers',
+					xaxis: 'x1',
+					yaxis: 'y1',
+				},
+				layout: {
+					title: "2",
+					xaxis: { title: 'Time' },
+					yaxis: { title: 'Value' },
+					showlegend: true,
+					grid: {},
+				},
+			});
 		}
+
 		setData(metricData);
 		setFilteredData(metricData);
 		setRefreshing(false);
@@ -193,25 +185,38 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 
 	const handleDrop = (index: number) => {
 		if (draggedIndex !== null && draggedIndex !== index) {
-			const newData = [...filteredData];
-			setMergeModalVisible(true);
-			[newData[draggedIndex], newData[index]] = [newData[index], newData[draggedIndex]];
-			const dropInfo = { index: index, dropIndex: draggedIndex };
-			setDropIndex(dropInfo);
-			setFilteredData(newData);
-			setData(newData);
+			if (
+				filteredData[draggedIndex].layout.xaxis.title.text === filteredData[index].layout.xaxis.title.text ||
+				filteredData[draggedIndex].layout.yaxis.title.text === filteredData[index].layout.yaxis.title.text
+			) {
+				console.log(1);
+				const newData = [...filteredData];
+				setMergeModalVisible(true);
+				[newData[draggedIndex], newData[index]] = [newData[index], newData[draggedIndex]];
+				const dropInfo = { index: index, dropIndex: draggedIndex };
+				setDropIndex(dropInfo);
+				setFilteredData(newData);
+				setData(newData);
+			} else {
+				setErrorMerge(true);
+			}
 			setDraggedIndex(null);
 			setHighlightedIndex(null);
 		}
 	};
 
 	const handleMergeConfirm = () => {
-		setMergeMetricsGraph(true);
+		setMergeMetricsChart(true);
 		setMergeModalVisible(false);
 	};
 
+	const handleMergeErrorConfirm = () => {
+		setErrorMerge(false);
+	};
+
 	const handleMergeCancel = () => {
-		setMergeMetricsGraph(false);
+		setMergeMetricsChart(false);
+		setErrorMerge(false);
 		setMergeModalVisible(false);
 	};
 
@@ -225,63 +230,46 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 	};
 
 	useEffect(() => {
-		if (mergeMetricsGraph && Object.keys(dropIndex).length !== 0) {
-			const newLayout = filteredData[dropIndex.dropIndex].layout;
-			newLayout.title = `${newLayout.title}-${filteredData[dropIndex.index].layout.title}`;
-			const mergedGraph: MergedChart = {
-				data: [
-					...(Array.isArray(filteredData[dropIndex.dropIndex].data)
-						? filteredData[dropIndex.dropIndex].data.map((dataItem: ChartData) => ({
-							name: dataItem.name,
-							x: [...dataItem.x],
-							y: [...dataItem.y],
-							type: traceSettings.type,
-							mode: traceSettings.mode,
-							xaxis: '',
-							yaxis: '',
-						}))
-						: [
-							{
-								name: filteredData[dropIndex.dropIndex].data.name,
-								x: [...filteredData[dropIndex.dropIndex].data.x],
-								y: [...filteredData[dropIndex.dropIndex].data.y],
-								type: traceSettings.type,
-								mode: traceSettings.mode,
-								xaxis: '',
-								yaxis: '',
-							},
-						]),
-					...(Array.isArray(filteredData[dropIndex.index].data)
-						? filteredData[dropIndex.index].data.map((dataItem: ChartData) => ({
-							name: dataItem.name,
-							x: [...dataItem.x],
-							y: [...dataItem.y],
-							type: traceSettings.type,
-							mode: traceSettings.mode,
-							xaxis: '',
-							yaxis: '',
-						}))
-						: [
-							{
-								name: filteredData[dropIndex.index].data.name,
-								x: [...filteredData[dropIndex.index].data.x],
-								y: [...filteredData[dropIndex.index].data.y],
-								type: traceSettings.type,
-								mode: traceSettings.mode,
-								xaxis: '',
-								yaxis: '',
-							},
-						]),
-				],
-				layout: newLayout,
-			};
+		if (mergeMetricsChart && Object.keys(dropIndex).length !== 0) {
+			const { dropIndex: dropIndexValue, index: dropIndexToMerge } = dropIndex;
+			const { layout: layoutToMerge, data: dataToMerge } = filteredData[dropIndexValue];
+			const { layout: layoutToDrop, data: dataToDrop } = filteredData[dropIndexToMerge];
 
-			const newData = filteredData.filter((_, index) => index !== dropIndex.dropIndex && index !== dropIndex.index);
-			newData.splice(dropIndex.dropIndex, 0, mergedGraph);
+			const mergedLayoutTitle = `${layoutToMerge.title}-${layoutToDrop.title}`;
+
+			const mergedData = [
+				...(Array.isArray(dataToMerge)
+					? dataToMerge.map(({ name, x, y }) => ({ name, x: [...x], y: [...y], type: traceSettings.type, mode: traceSettings.mode, xaxis: '', yaxis: '' }))
+					: [{ name: dataToMerge.name, x: [...dataToMerge.x], y: [...dataToMerge.y], type: traceSettings.type, mode: traceSettings.mode, xaxis: '', yaxis: '' }]
+				),
+				...(Array.isArray(dataToDrop)
+					? dataToDrop.map(({ name, x, y }) => ({ name, x: [...x], y: [...y], type: traceSettings.type, mode: traceSettings.mode, xaxis: '', yaxis: '' }))
+					: [{ name: dataToDrop.name, x: [...dataToDrop.x], y: [...dataToDrop.y], type: traceSettings.type, mode: traceSettings.mode, xaxis: '', yaxis: '' }]
+				),
+			];
+
+			const mergedChart = { data: mergedData, layout: { ...layoutToMerge, title: mergedLayoutTitle } };
+
+			const newData = filteredData.filter((_, index) => index !== dropIndexValue && index !== dropIndexToMerge);
+			newData.splice(dropIndexValue, 0, mergedChart);
+
 			setData(newData);
-			setMergeMetricsGraph(false);
+			setMergeMetricsChart(false);
 		}
-	}, [mergeMetricsGraph, filteredData, dropIndex, traceSettings.type, traceSettings.mode]);
+	}, [mergeMetricsChart, filteredData, dropIndex, traceSettings]);
+
+
+	const onChangeLayout = (updatedLayout: LayoutSettings | undefined) => {
+		if (updatedLayout) {
+			const updatedData = data.map((plot) => {
+				if (plot && plot.layout.title === selectedPlotData?.layout.title) {
+					return { ...plot, layout: updatedLayout };
+				}
+				return plot;
+			});
+			setData(updatedData);
+		}
+	};
 
 	return (
 		<div>
@@ -311,7 +299,9 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 				</Tabs>
 			</div>
 			{searchNotFound && !fetchingData && (
-				<div style={{ color: 'red', marginBottom: '12px' }}>Metric not found. Please enter a valid metric name.</div>
+				<div style={{ color: 'red', marginBottom: '12px' }}>
+					Metric not found. Please enter a valid metric name.
+				</div>
 			)}
 			{fetchingData && (
 				<div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
@@ -378,21 +368,18 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 			<PlotSettingsModal
 				isOpen={plotSettingsModalOpen}
 				onRequestClose={handleClosePlotSettingsModal}
-				plotData={selectedPlotData}
-				layout={layoutSettings[selectedPlotData?.name ?? ''] || {}}
-				onChangeLayout={(newLayout) =>
-					setLayout((prevLayout) => ({
-						...prevLayout,
-						[selectedPlotData?.name ?? '']: newLayout,
-					}))
-				}
+				plot={selectedPlotData}
+				onChangeLayout={onChangeLayout}
 			/>
-			<MergeGraphsModal
+
+			<MergeChartsModal
 				visible={mergeModalVisible}
 				onConfirm={handleMergeConfirm}
 				onCancel={handleMergeCancel}
-				setMergeMetricsGraph={setMergeMetricsGraph}
+				setMergeMetricsChart={setMergeMetricsChart}
 			/>
+
+			<MergeErrorChartModal visible={errorMerge} onConfirm={handleMergeErrorConfirm} />
 		</div>
 	);
 };
