@@ -18,7 +18,7 @@ export interface DropIndex {
     dropIndex: number;
 }
 
-export type ChartData = {
+export type ChartData = [{
     name: string;
     x: string[];
     y: number[];
@@ -26,7 +26,8 @@ export type ChartData = {
     mode: PlotData['mode'];
     xaxis: PlotData['xaxis'];
     yaxis: PlotData['yaxis'];
-};
+    fill: PlotData['fill']
+}];
 export type LayoutSettings = {
     title: Plotly.Layout['title'];
     xaxis: Plotly.Layout['xaxis'];

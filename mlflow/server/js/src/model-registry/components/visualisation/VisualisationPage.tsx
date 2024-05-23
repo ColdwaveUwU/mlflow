@@ -85,17 +85,16 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 				console.error('Request execution error', error);
 				return [];
 			});
-			console.log(filteredData);
 			const runInfoArr = runs as RunInfoEntityResponse[];
 			runInfoArr.forEach((runInfo) => {
 				runInfo.run.data.metrics.forEach((metric, index) => {
 					const metricIndex = metricData.findIndex((item) => item.layout.title === metric.key);
 					if (metricIndex !== -1) {
-						metricData[metricIndex].data.x.push(new Date(metric.timestamp).toISOString());
-						metricData[metricIndex].data.y.push(metric.value);
+						metricData[metricIndex].data[0].x.push(new Date(metric.timestamp).toISOString());
+						metricData[metricIndex].data[0].y.push(metric.value);
 					} else {
 						metricData.push({
-							data: {
+							data: [{
 								name: metric.key,
 								x: [new Date(metric.timestamp).toISOString()],
 								y: [metric.value],
@@ -103,7 +102,8 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 								mode: 'lines+markers',
 								xaxis: 'x1',
 								yaxis: 'y1',
-							},
+								fill: 'none'
+							}],
 							layout: {
 								title: metric.key.toString(),
 								xaxis: { title: 'Time' },
@@ -118,7 +118,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 		} else {
 			setFetchingData(true);
 			metricData.push({
-				data: {
+				data: [{
 					name: "sa",
 					x: ["1223213"],
 					y: [3],
@@ -126,7 +126,8 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 					mode: 'lines+markers',
 					xaxis: 'x1',
 					yaxis: 'y1',
-				},
+					fill: 'none'
+				}],
 				layout: {
 					title: "2",
 					xaxis: { title: 'Time' },
@@ -189,7 +190,6 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 				filteredData[draggedIndex].layout.xaxis.title.text === filteredData[index].layout.xaxis.title.text ||
 				filteredData[draggedIndex].layout.yaxis.title.text === filteredData[index].layout.yaxis.title.text
 			) {
-				console.log(1);
 				const newData = [...filteredData];
 				setMergeModalVisible(true);
 				[newData[draggedIndex], newData[index]] = [newData[index], newData[draggedIndex]];
@@ -235,7 +235,8 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 			const { layout: layoutToMerge, data: dataToMerge } = filteredData[dropIndexValue];
 			const { layout: layoutToDrop, data: dataToDrop } = filteredData[dropIndexToMerge];
 
-			const mergedLayoutTitle = `${layoutToMerge.title}-${layoutToDrop.title}`;
+
+			const mergedLayoutTitle = `${typeof layoutToMerge.title === 'object' ? layoutToMerge.title.text : layoutToMerge.title}-${typeof layoutToDrop.title === 'object' ? layoutToDrop.title.text : layoutToDrop.title}`;
 
 			const mergedData = [
 				...(Array.isArray(dataToMerge)
@@ -259,11 +260,16 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 	}, [mergeMetricsChart, filteredData, dropIndex, traceSettings]);
 
 
-	const onChangeLayout = (updatedLayout: LayoutSettings | undefined) => {
-		if (updatedLayout) {
+	const onChangePlot = (updatedLayout: LayoutSettings | undefined, updatedData: ChartData | ChartData[] | undefined) => {
+		const newChart = {
+			data: updatedData,
+			layout: updatedLayout
+		}
+		if (updatedLayout && updatedData) {
 			const updatedData = data.map((plot) => {
 				if (plot && plot.layout.title === selectedPlotData?.layout.title) {
-					return { ...plot, layout: updatedLayout };
+					plot = newChart
+					return plot;
 				}
 				return plot;
 			});
@@ -357,7 +363,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 									layout={{
 										...metric.layout,
 									}}
-									config={{ displaylogo: false }}
+									config={{ displaylogo: false, responsive: true }}
 									style={{ width: '100%', height: '100%' }}
 								/>
 							</div>
@@ -369,7 +375,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
 				isOpen={plotSettingsModalOpen}
 				onRequestClose={handleClosePlotSettingsModal}
 				plot={selectedPlotData}
-				onChangeLayout={onChangeLayout}
+				onChangePlot={onChangePlot}
 			/>
 
 			<MergeChartsModal
