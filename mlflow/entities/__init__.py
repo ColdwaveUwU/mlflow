@@ -3,6 +3,7 @@ The ``mlflow.entities`` module defines entities returned by the MLflow
 `REST API <../rest-api.html>`_.
 """
 
+from mlflow.entities.custom_metric import CustomMetric
 from mlflow.entities.dataset import Dataset
 from mlflow.entities.dataset_input import DatasetInput
 from mlflow.entities.dataset_summary import _DatasetSummary
@@ -41,4 +42,5 @@ __all__ = [
     "DatasetInput",
     "RunInputs",
     "_DatasetSummary",
+    "CustomMetric",
 ]

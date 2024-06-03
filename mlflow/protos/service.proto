@@ -428,6 +428,18 @@ service MlflowService {
       rpc_doc_title: "Log Inputs",
     };
   }
+
+  rpc getCustomMetricsFromUrl (GetCustomMetricsFromUrl) returns (GetCustomMetricsFromUrl.Response) {
+    option (rpc) = {
+      endpoints: [{
+        method: "GET",
+        path: "/mlflow/custom-metrics/get-from-url"
+        since { major: 2, minor: 0 },
+      }],
+      visibility: PUBLIC,
+      rpc_doc_title: "Gets Custom Metrics From Url",
+    };
+  }
 }
 
 // View type for ListExperiments query.
@@ -1174,5 +1186,21 @@ message GetExperimentByName {
   message Response {
     // Experiment details.
     optional Experiment experiment = 1;
+  }
+}
+
+message CustomMetric {
+  optional string name = 1;
+  optional double value = 2;
+  optional string version = 3;
+}
+
+message GetCustomMetricsFromUrl {
+  option (scalapb.message).extends = "com.databricks.rpc.RPC[$this.Response]";
+
+  optional string url = 1;
+
+  message Response {
+    repeated CustomMetric custom_metrics = 1;
   }
 }

@@ -17,7 +17,16 @@ from flask import Response, current_app, jsonify, request, send_file
 from google.protobuf import descriptor
 from google.protobuf.json_format import ParseError
 
-from mlflow.entities import DatasetInput, ExperimentTag, FileInfo, Metric, Param, RunTag, ViewType
+from mlflow.entities import (
+    CustomMetric,
+    DatasetInput,
+    ExperimentTag,
+    FileInfo,
+    Metric,
+    Param,
+    RunTag,
+    ViewType,
+)
 from mlflow.entities.model_registry import ModelVersionTag, RegisteredModelTag
 from mlflow.entities.multipart_upload import MultipartUploadPart
 from mlflow.environment_variables import MLFLOW_DEPLOYMENTS_TARGET
@@ -70,6 +79,7 @@ from mlflow.protos.service_pb2 import (
     DeleteExperiment,
     DeleteRun,
     DeleteTag,
+    GetCustomMetricsFromUrl,
     GetExperiment,
     GetExperimentByName,
     GetMetricHistory,
@@ -726,6 +736,32 @@ def _create_run():
 
     response_message = CreateRun.Response()
     response_message.run.MergeFrom(run.to_proto())
+    response = Response(mimetype="application/json")
+    response.set_data(message_to_json(response_message))
+    return response
+
+
+@catch_mlflow_exception
+@_disable_if_artifacts_only
+def _get_custom_metrics_from_url():
+    request_message = _get_request_message(
+        GetCustomMetricsFromUrl(),
+        schema={"url": [_assert_string, _assert_required]},
+    )
+    request_url = request_message.url
+    try:
+        requests_response = requests.get(url=request_url)
+    except requests.exceptions.RequestException:
+        response = Response(mimetype="application/json")
+        response.set_data("Url is not correct.")
+        response.status_code = 400
+        return response
+
+    custom_metrics = requests_response.json()
+    response_message = GetCustomMetricsFromUrl.Response()
+    response_message.custom_metrics.extend(
+        [CustomMetric.from_dictionary(cm).to_proto() for cm in custom_metrics]
+    )
     response = Response(mimetype="application/json")
     response.set_data(message_to_json(response_message))
     return response
@@ -2361,4 +2397,5 @@ HANDLERS = {
     CreateMultipartUpload: _create_multipart_upload_artifact,
     CompleteMultipartUpload: _complete_multipart_upload_artifact,
     AbortMultipartUpload: _abort_multipart_upload_artifact,
+    GetCustomMetricsFromUrl: _get_custom_metrics_from_url,
 }
