@@ -294,10 +294,81 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
     setUrl(event.target.value);
   };
 
-  const handleUrlSubmit = () => {
-    // 
-};
+  const saveMetricsToLocalStorage = (metrics: ChartSetting[]) => {
+    localStorage.setItem('customMetrics', JSON.stringify(metrics));
+  };
 
+  const loadMetricsFromLocalStorage = (): ChartSetting[] => {
+    const storedMetrics = localStorage.getItem('customMetrics');
+    return storedMetrics ? JSON.parse(storedMetrics) : [];
+  };
+
+  useEffect(() => {
+    const storedMetrics = loadMetricsFromLocalStorage();
+    setData((prevData) => [...prevData, ...storedMetrics]);
+    setFilteredData((prevData) => [...prevData, ...storedMetrics]);
+  }, []);
+
+  const handleUrlSubmit = async () => {
+    setFetchingData(true);
+    const apiUrl = `ajax-api/2.0/mlflow/custom-metrics/get-from-url?url=${url}`;
+    const response = await fetch(apiUrl);
+    const data = await response.json();
+    const groupedMetrics = {};
+
+    data.custom_metrics.forEach((item) => {
+      if (!groupedMetrics[item.name]) {
+        groupedMetrics[item.name] = { version: [], value: [] };
+      }
+      groupedMetrics[item.name].version.push(item.version);
+      groupedMetrics[item.name].value.push(item.value);
+    });
+
+    const newCharts = Object.keys(groupedMetrics).map((name) => ({
+      data: [
+        {
+          name: name,
+          x: groupedMetrics[name].version,
+          y: groupedMetrics[name].value,
+          type: 'scatter',
+          mode: 'lines+markers',
+          xaxis: 'x1',
+          yaxis: 'y1',
+          fill: 'none',
+        },
+      ],
+      layout: {
+        title: name.toString(),
+        xaxis: { title: 'Version' },
+        yaxis: { title: 'Value' },
+        showlegend: true,
+        grid: {},
+      },
+    }));
+
+    const storedMetrics = JSON.parse(localStorage.getItem('customMetrics')) || [];
+    const mergedMetrics = [...storedMetrics];
+    newCharts.forEach((newChart) => {
+      const existingChart = mergedMetrics.find((chart) => chart.layout.title === newChart.layout.title);
+      if (existingChart) {
+        existingChart.data[0].x.push(...newChart.data[0].x);
+        existingChart.data[0].y.push(...newChart.data[0].y);
+      } else {
+        mergedMetrics.push(newChart);
+      }
+    });
+    localStorage.setItem('customMetrics', JSON.stringify(mergedMetrics));
+
+    setData(mergedMetrics);
+    setFilteredData(mergedMetrics);
+    setFetchingData(false);
+  };
+
+  const resetMetrics = () => {
+    localStorage.removeItem('customMetrics');
+    setData([]);
+    setFilteredData([]);
+  };
 
   return (
     <div>
@@ -328,6 +399,9 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
               <Input type="text" value={url} onChange={handleUrlChange} placeholder="Enter microservice URL" />
               <Button onClick={handleUrlSubmit} componentId={''}>
                 Submit URL
+              </Button>
+              <Button onClick={resetMetrics} componentId={''} style={{ marginLeft: '10px' }}>
+                Reset Metrics
               </Button>
             </Spacer>
           </TabPane>
