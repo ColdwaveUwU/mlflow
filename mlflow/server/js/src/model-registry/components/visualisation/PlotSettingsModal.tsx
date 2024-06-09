@@ -30,9 +30,9 @@ const PlotSettingsModal: React.FC<PlotSettingsModalProps> = ({
       setLocalLayout(plot.layout);
       setLocalData(plot.data);
     } else {
-      setLocalLayout(null); // Сбросить localLayout при закрытии модального окна
-      setLocalData(null); // Сбросить localData при закрытии модального окна
-      setSelectedDataIndex(null); // Сбросить selectedDataIndex при закрытии модального окна
+      setLocalLayout(null); 
+      setLocalData(null); 
+      setSelectedDataIndex(null); 
     }
   }, [isOpen, plot]);
 

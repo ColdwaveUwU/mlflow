@@ -20,6 +20,7 @@ import {
   ModelNameProps,
 } from './type';
 import MergeErrorChartModal from './MergeErrorChartModal';
+import EmptyInputForm from './EmptyInputForm';
 
 const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
   const [data, setData] = useState<ChartSetting[]>([]);
@@ -37,6 +38,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
   const [mergeModalVisible, setMergeModalVisible] = useState<boolean>(false);
   const [mergeMetricsChart, setMergeMetricsChart] = useState<boolean>(false);
   const [errorMerge, setErrorMerge] = useState<boolean>(false);
+  const [errorInput, setErrorInput] = useState<boolean>(false);
   const [traceSettings, setTraceSettings] = useState<{ type: Plotly.PlotType; mode: PlotData['mode'] }>({
     type: 'scatter',
     mode: 'lines+markers',
@@ -190,6 +192,10 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
     setErrorMerge(false);
   };
 
+  const handleEmptyInputConfirm = () => {
+    setErrorInput(false)
+  }
+
   const handleMergeCancel = () => {
     setMergeMetricsChart(false);
     setErrorMerge(false);
@@ -294,74 +300,76 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
     setUrl(event.target.value);
   };
 
-  const saveMetricsToLocalStorage = (metrics: ChartSetting[]) => {
-    localStorage.setItem('customMetrics', JSON.stringify(metrics));
-  };
-
   const loadMetricsFromLocalStorage = (): ChartSetting[] => {
     const storedMetrics = localStorage.getItem('customMetrics');
     return storedMetrics ? JSON.parse(storedMetrics) : [];
   };
 
   useEffect(() => {
-    const storedMetrics = loadMetricsFromLocalStorage();
-    setData((prevData) => [...prevData, ...storedMetrics]);
-    setFilteredData((prevData) => [...prevData, ...storedMetrics]);
-  }, []);
+    if (metricsType === 'other') {
+      const storedMetrics = loadMetricsFromLocalStorage();
+      setData((prevData) => [...prevData, ...storedMetrics]);
+      setFilteredData((prevData) => [...prevData, ...storedMetrics]);
+    }
+  }, [metricsType]);
 
   const handleUrlSubmit = async () => {
-    setFetchingData(true);
-    const apiUrl = `ajax-api/2.0/mlflow/custom-metrics/get-from-url?url=${url}`;
-    const response = await fetch(apiUrl);
-    const data = await response.json();
-    const groupedMetrics = {};
+    if (/^(ftp|http|https):\/\/[^ "]+$/.test(url)) {
+      setFetchingData(true);
+      const apiUrl = `ajax-api/2.0/mlflow/custom-metrics/get-from-url?url=${url}`;
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      const groupedMetrics = {};
 
-    data.custom_metrics.forEach((item) => {
-      if (!groupedMetrics[item.name]) {
-        groupedMetrics[item.name] = { version: [], value: [] };
-      }
-      groupedMetrics[item.name].version.push(item.version);
-      groupedMetrics[item.name].value.push(item.value);
-    });
+      data.custom_metrics.forEach((item) => {
+        if (!groupedMetrics[item.name]) {
+          groupedMetrics[item.name] = { version: [], value: [] };
+        }
+        groupedMetrics[item.name].version.push(item.version);
+        groupedMetrics[item.name].value.push(item.value);
+      });
 
-    const newCharts = Object.keys(groupedMetrics).map((name) => ({
-      data: [
-        {
-          name: name,
-          x: groupedMetrics[name].version,
-          y: groupedMetrics[name].value,
-          type: 'scatter',
-          mode: 'lines+markers',
-          xaxis: 'x1',
-          yaxis: 'y1',
-          fill: 'none',
+      const newCharts = Object.keys(groupedMetrics).map((name) => ({
+        data: [
+          {
+            name: name,
+            x: groupedMetrics[name].version,
+            y: groupedMetrics[name].value,
+            type: 'scatter',
+            mode: 'lines+markers',
+            xaxis: 'x1',
+            yaxis: 'y1',
+            fill: 'none',
+          },
+        ],
+        layout: {
+          title: name.toString(),
+          xaxis: { title: 'Version' },
+          yaxis: { title: 'Value' },
+          showlegend: true,
+          grid: {},
         },
-      ],
-      layout: {
-        title: name.toString(),
-        xaxis: { title: 'Version' },
-        yaxis: { title: 'Value' },
-        showlegend: true,
-        grid: {},
-      },
-    }));
+      }));
 
-    const storedMetrics = JSON.parse(localStorage.getItem('customMetrics')) || [];
-    const mergedMetrics = [...storedMetrics];
-    newCharts.forEach((newChart) => {
-      const existingChart = mergedMetrics.find((chart) => chart.layout.title === newChart.layout.title);
-      if (existingChart) {
-        existingChart.data[0].x.push(...newChart.data[0].x);
-        existingChart.data[0].y.push(...newChart.data[0].y);
-      } else {
-        mergedMetrics.push(newChart);
-      }
-    });
-    localStorage.setItem('customMetrics', JSON.stringify(mergedMetrics));
+      const storedMetrics = JSON.parse(localStorage.getItem('customMetrics')) || [];
+      const mergedMetrics = [...storedMetrics];
+      newCharts.forEach((newChart) => {
+        const existingChart = mergedMetrics.find((chart) => chart.layout.title === newChart.layout.title);
+        if (existingChart) {
+          existingChart.data[0].x.push(...newChart.data[0].x);
+          existingChart.data[0].y.push(...newChart.data[0].y);
+        } else {
+          mergedMetrics.push(newChart);
+        }
+      });
+      localStorage.setItem('customMetrics', JSON.stringify(mergedMetrics));
 
-    setData(mergedMetrics);
-    setFilteredData(mergedMetrics);
-    setFetchingData(false);
+      setData(mergedMetrics);
+      setFilteredData(mergedMetrics);
+      setFetchingData(false);
+    } else {
+      setErrorInput(true);
+    }
   };
 
   const resetMetrics = () => {
@@ -398,7 +406,11 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
             <Spacer direction="horizontal" size="small">
               <Input type="text" value={url} onChange={handleUrlChange} placeholder="Enter microservice URL" />
               <Button onClick={handleUrlSubmit} componentId={''}>
-                Submit URL
+                {fetchingData ? (
+                  <Spinner />
+                ) : (
+                  <FormattedMessage defaultMessage="Submit URL" description=""></FormattedMessage>
+                )}
               </Button>
               <Button onClick={resetMetrics} componentId={''} style={{ marginLeft: '10px' }}>
                 Reset Metrics
@@ -407,9 +419,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
           </TabPane>
         </Tabs>
       </div>
-      {searchNotFound && !fetchingData && (
-        <div style={{ color: 'red', marginBottom: '12px' }}>Metric not found. Please enter a valid metric name.</div>
-      )}
+      {searchNotFound && !fetchingData && <div style={{ color: 'red', marginBottom: '12px' }}>Metric not found.</div>}
       {fetchingData && (
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
           <Spinner />
@@ -487,6 +497,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
       />
 
       <MergeErrorChartModal visible={errorMerge} onConfirm={handleMergeErrorConfirm} />
+      <EmptyInputForm visible={errorInput} onConfirm={handleEmptyInputConfirm}></EmptyInputForm>
     </div>
   );
 };
