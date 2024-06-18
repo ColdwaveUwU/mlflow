@@ -217,53 +217,52 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
       const { layout: layoutToMerge, data: dataToMerge } = filteredData[dropIndexValue];
       const { layout: layoutToDrop, data: dataToDrop } = filteredData[dropIndexToMerge];
 
-      const mergedLayoutTitle = `${
-        typeof layoutToMerge.title === 'object' ? layoutToMerge.title.text : layoutToMerge.title
-      }-${typeof layoutToDrop.title === 'object' ? layoutToDrop.title.text : layoutToDrop.title}`;
+      const mergedLayoutTitle = `${typeof layoutToMerge.title === 'object' ? layoutToMerge.title.text : layoutToMerge.title
+        }-${typeof layoutToDrop.title === 'object' ? layoutToDrop.title.text : layoutToDrop.title}`;
 
       const mergedData = [
         ...(Array.isArray(dataToMerge)
           ? dataToMerge.map(({ name, x, y }) => ({
-              name,
-              x: [...x],
-              y: [...y],
+            name,
+            x: [...x],
+            y: [...y],
+            type: traceSettings.type,
+            mode: traceSettings.mode,
+            xaxis: '',
+            yaxis: '',
+          }))
+          : [
+            {
+              name: dataToMerge.name,
+              x: [...dataToMerge.x],
+              y: [...dataToMerge.y],
               type: traceSettings.type,
               mode: traceSettings.mode,
               xaxis: '',
               yaxis: '',
-            }))
-          : [
-              {
-                name: dataToMerge.name,
-                x: [...dataToMerge.x],
-                y: [...dataToMerge.y],
-                type: traceSettings.type,
-                mode: traceSettings.mode,
-                xaxis: '',
-                yaxis: '',
-              },
-            ]),
+            },
+          ]),
         ...(Array.isArray(dataToDrop)
           ? dataToDrop.map(({ name, x, y }) => ({
-              name,
-              x: [...x],
-              y: [...y],
+            name,
+            x: [...x],
+            y: [...y],
+            type: traceSettings.type,
+            mode: traceSettings.mode,
+            xaxis: '',
+            yaxis: '',
+          }))
+          : [
+            {
+              name: dataToDrop.name,
+              x: [...dataToDrop.x],
+              y: [...dataToDrop.y],
               type: traceSettings.type,
               mode: traceSettings.mode,
               xaxis: '',
               yaxis: '',
-            }))
-          : [
-              {
-                name: dataToDrop.name,
-                x: [...dataToDrop.x],
-                y: [...dataToDrop.y],
-                type: traceSettings.type,
-                mode: traceSettings.mode,
-                xaxis: '',
-                yaxis: '',
-              },
-            ]),
+            },
+          ]),
       ];
 
       const mergedChart = { data: mergedData, layout: { ...layoutToMerge, title: mergedLayoutTitle } };
@@ -371,6 +370,31 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
       setErrorInput(true);
     }
   };
+  const downloadCSV = (filename: string, csvContent: string) => {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  const convertToCSV = (data: ChartSetting['data']): string => {
+    if (!data || data.length === 0) {
+      return '';
+    }
+
+    const headers = ['Name', 'X', 'Y'];
+    const rows = data.flatMap((trace) =>
+      trace.x.map((xVal, index) => `${trace.name},${xVal},${trace.y[index]}`)
+    );
+
+    return [headers.join(','), ...rows].join('\n');
+  };
 
   const resetMetrics = () => {
     localStorage.removeItem('customMetrics');
@@ -477,9 +501,21 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
                   config={{ displaylogo: false, responsive: true }}
                   style={{ width: '100%', height: '100%' }}
                 />
+                <Button
+                  onClick={() => {
+                    const csvContent = convertToCSV(metric.data);
+                    const filename = `${metric.layout.title}.csv`;
+                    downloadCSV(filename, csvContent);
+                  }}
+                  componentId={''}
+                  style={{ marginTop: '10px' }}
+                >
+                  Download CSV
+                </Button>
               </div>
             </Col>
           ))}
+
         </Row>
       )}
       <PlotSettingsModal
