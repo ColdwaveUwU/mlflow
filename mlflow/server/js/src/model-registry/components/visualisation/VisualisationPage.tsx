@@ -343,7 +343,7 @@ const VisualisationPage: React.FC<ModelNameProps> = ({ name }) => {
         ],
         layout: {
           title: name.toString(),
-          xaxis: { title: 'Version' },
+          xaxis: { title: 'Date', automargin: true},
           yaxis: { title: 'Value' },
           showlegend: true,
           grid: {},
